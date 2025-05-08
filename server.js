@@ -1,10 +1,8 @@
 require('dotenv').config(); // Ensure environment variables are loaded
-
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const morgan = require('morgan');
-
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
 const groupRoutes = require('./routes/group');

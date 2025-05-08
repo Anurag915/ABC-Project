@@ -3,23 +3,13 @@ const Group = require('../models/Group.js');
 const auth = require('../middlewares/auth.js');
 const allowRoles = require('../middlewares/allowRoles.js');
 const router = express.Router();
-// GET all groups with full details
 
+// GET all groups with full details
 router.get('/', async (req, res) => {
   try {
     const groups = await Group.find()
       .populate('employees')
-      .populate({
-        path: 'labId',
-        populate: [
-          { path: 'technologiesDeveloped' },
-          { path: 'projects' },
-          { path: 'publications' },
-          { path: 'patents' },
-          { path: 'courses' }, // ya 'coursesConducted' agar field ka naam wahi hai
-          { path: 'manpowerList' }
-        ]
-      })
+      .populate('labId') // Populate related labId
       .populate('projects') // Populate related projects
       .populate('patents')// Populate related patents
       .populate('technologiesDeveloped') // Populate related technologiesDeveloped
