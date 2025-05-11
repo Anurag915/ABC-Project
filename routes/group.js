@@ -1,118 +1,157 @@
-const express = require('express');
-const Group = require('../models/Group.js');
-const auth = require('../middlewares/auth.js');
-const allowRoles = require('../middlewares/allowRoles.js');
+// routes/groups.js
+const express = require("express");
+const Group = require("../models/Group.js");
+const multer = require("multer");
+const auth = require("../middlewares/auth.js");
+const allowRoles = require("../middlewares/allowRoles.js");
 const router = express.Router();
+const User = require('../models/User');    // User model
+// Multer setup for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, "uploads/"),
+  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
+});
+const upload = multer({ storage });
 
-// GET all groups with full details
-router.get('/', async (req, res) => {
+// GET all groups (with employees & lab populated)
+router.get("/", async (req, res) => {
   try {
-    const groups = await Group.find()
-      .populate('employees')
-      .populate('labId') // Populate related labId
-      .populate('projects') // Populate related projects
-      .populate('patents')// Populate related patents
-      .populate('technologiesDeveloped') // Populate related technologiesDeveloped
-      .populate('publications') // Populate related publications
-      .populate('coursesConducted'); // Populate related coursesConducted
-    res.json(groups);
-  } catch (error) {
-    console.error('Error fetching groups:', error);
-    res.status(500).json({ error: 'Failed to fetch groups' });
+    console.log("GET /groups called");
+
+    const groups = await Group.find();
+    console.log("Groups fetched (raw):", groups);
+
+    const populatedGroups = await Group.find().populate(
+      "employees",
+      "name email"
+    );
+
+    console.log("Groups after populate:", populatedGroups);
+
+    res.json(populatedGroups);
+  } catch (err) {
+    console.error("❌ Error fetching groups:");
+    console.error("Message:", err.message);
+    console.error("Stack:", err.stack);
+    res.status(500).json({ error: "Failed to fetch groups" });
   }
 });
 
-// GET single group by ID with full details
-router.get('/:id', async (req, res) => {
+// POST create new group
+router.post("/", auth, allowRoles("admin"), async (req, res) => {
   try {
-    const group = await Group.findById(req.params.id)
-      .populate('employees')
-      .populate('labId')
-      .populate('projects')
-      .populate('patents')
-      .populate('technologiesDeveloped')
-      .populate('publications')
-      .populate('coursesConducted');
-      
+    const { labId } = req.params;
+    const { name, description, employees } = req.body;
+    if (!name) return res.status(400).json({ error: "Group name required" });
 
-    if (!group) return res.status(404).json({ error: 'Group not found' });
-
-    res.json(group);
-  } catch (error) {
-    console.error('Error fetching group:', error);
-    res.status(500).json({ error: 'Failed to fetch group', details: error.message });
+    const group = new Group({ name, description, labId, employees });
+    const saved = await group.save();
+    res.status(201).json(saved);
+  } catch (err) {
+    console.error("Error creating group:", err);
+    res.status(500).json({ error: "Failed to create group" });
   }
 });
 
 
+// POST upload a file to a group's sub-document array
 
-// POST a single group for a specific lab
-router.post('/:labId', auth, allowRoles('admin'), async (req, res) => {
-  const { labId } = req.params;
-  const {
-    name,
-    description,
-    employees,
-    projects,
-    patents,
-    technologiesDeveloped,
-    publications,
-    coursesConducted
-  } = req.body;
+router.post(
+  "/:groupId/upload",
+  auth,
+  allowRoles("admin"),
+  upload.single("file"),
+  async (req, res) => {
+    const { groupId } = req.params;
+    const { type, name, description } = req.body;
 
-  if (!name) {
-    return res.status(400).json({ error: 'Group name is required' });
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+    const fileUrl = `/uploads/${req.file.filename}`;
+
+    try {
+      const group = await Group.findById(groupId);
+      if (!group) return res.status(404).json({ error: "Group not found" });
+
+      const item = { name, description, fileUrl };
+
+      // Add item to the correct array based on the type
+      switch (type) {
+        case "project":
+          group.projects.push(item);
+          break;
+        case "patent":
+          group.patents.push(item);
+          break;
+        case "technology":
+          group.technologies.push(item);
+          break;
+        case "publication":
+          group.publications.push(item);
+          break;
+        case "course":
+          group.courses.push(item);
+          break;
+        default:
+          return res.status(400).json({ error: "Invalid type" });
+      }
+
+      // Save the updated group document
+      await group.save();
+      res.json({ message: "Uploaded successfully", group: group.toObject() });
+    } catch (err) {
+      console.error("Error during upload:", err);
+      res.status(500).json({ error: "Upload failed" });
+    }
   }
+);
 
+
+// UPDATE group details (name/desc/employees)
+router.put("/:id", auth, allowRoles("admin"), async (req, res) => {
   try {
-    const newGroup = new Group({
-      name,
-      description,
-      employees,
-      labId,
-      projects,
-      patents,
-      technologiesDeveloped,
-      publications,
-      coursesConducted
-    });
-
-    const savedGroup = await newGroup.save();
-    res.status(201).json(savedGroup);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to create group', details: error.message });
-  }
-});
-
-// UPDATE group by ID
-router.put('/:id', auth, allowRoles('admin'), async (req, res) => {
-  const { name, description, employees } = req.body;
-
-  try {
-    const updatedGroup = await Group.findByIdAndUpdate(
+    const { name, description, employees } = req.body;
+    const updated = await Group.findByIdAndUpdate(
       req.params.id,
       { name, description, employees },
       { new: true, runValidators: true }
     );
-
-    if (!updatedGroup) return res.status(404).json({ error: 'Group not found' });
-
-    res.json(updatedGroup);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to update group', details: error.message });
+    if (!updated) return res.status(404).json({ error: "Group not found" });
+    res.json(updated);
+  } catch (err) {
+    console.error("Error updating group:", err);
+    res.status(500).json({ error: "Failed to update" });
   }
 });
 
-
-// DELETE group by ID
-router.delete('/:id', auth, allowRoles('admin'), async (req, res) => {
+// DELETE group
+router.delete("/:id", auth, allowRoles("admin"), async (req, res) => {
   try {
-    const deletedGroup = await Group.findByIdAndDelete(req.params.id);
-    if (!deletedGroup) return res.status(404).json({ error: 'Group not found' });
+    const del = await Group.findByIdAndDelete(req.params.id);
+    if (!del) return res.status(404).json({ error: "Group not found" });
+    res.json({ message: "Group deleted" });
+  } catch (err) {
+    console.error("Error deleting group:", err);
+    res.status(500).json({ error: "Delete failed" });
+  }
+});
 
-    res.json({ message: 'Group deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to delete group', details: error.message });
+// GET single group by ID
+router.get("/:id", async (req, res) => {
+  const { id } = req.params;
+  console.log("Incoming GET /group/:id", id);
+
+  try {
+    const group = await Group.findById(id)
+      .populate('employees', 'name email');  // Populate employees with name and email
+
+    if (!group) {
+      return res.status(404).json({ error: "Group not found" });
+    }
+    res.json(group);
+  } catch (err) {
+    console.error("Fetch error:", err.message);
+    res.status(500).json({ error: "Failed to fetch group" });
   }
 });
 

@@ -63,8 +63,3 @@ app.use('/api/courses',courseRoutes);
 app.get('/', (req, res) => {
   res.send('Welcome to the API');
 });
-
-// Start server
-// app.listen(PORT, () => {
-//   console.log(`🚀 Server running on port ${PORT}`);
-// });
