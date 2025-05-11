@@ -5,7 +5,10 @@ const multer = require("multer");
 const auth = require("../middlewares/auth.js");
 const allowRoles = require("../middlewares/allowRoles.js");
 const router = express.Router();
-const User = require('../models/User');    // User model
+const User = require("../models/User"); // User model
+const fs = require("fs");
+const path = require("path");
+
 // Multer setup for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
@@ -52,7 +55,6 @@ router.post("/", auth, allowRoles("admin"), async (req, res) => {
     res.status(500).json({ error: "Failed to create group" });
   }
 });
-
 
 // POST upload a file to a group's sub-document array
 
@@ -106,7 +108,6 @@ router.post(
   }
 );
 
-
 // UPDATE group details (name/desc/employees)
 router.put("/:id", auth, allowRoles("admin"), async (req, res) => {
   try {
@@ -142,8 +143,7 @@ router.get("/:id", async (req, res) => {
   console.log("Incoming GET /group/:id", id);
 
   try {
-    const group = await Group.findById(id)
-      .populate('employees', 'name email');  // Populate employees with name and email
+    const group = await Group.findById(id).populate("employees", "name email"); // Populate employees with name and email
 
     if (!group) {
       return res.status(404).json({ error: "Group not found" });
@@ -154,5 +154,64 @@ router.get("/:id", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch group" });
   }
 });
+
+router.delete(
+  "/:groupId/delete-document/:docId",
+  auth,
+  allowRoles("admin"),
+  async (req, res) => {
+    const { groupId, docId } = req.params;
+    const { type } = req.query;
+
+    const validTypes = {
+      projects: "projects",
+      patents: "patents",
+      technologies: "technologies",
+      publications: "publications",
+      courses: "courses",
+    };
+
+    const subDocKey = validTypes[type];
+    if (!subDocKey) {
+      return res.status(400).json({ error: "Invalid document type" });
+    }
+
+    try {
+      const group = await Group.findById(groupId);
+      if (!group) return res.status(404).json({ error: "Group not found" });
+      console.log("🔍 Group ID:", groupId);
+      console.log("🔍 Document ID:", docId);
+      console.log("🔍 Document Type:", type);
+      console.log("📁 SubDoc Key:", subDocKey);
+      console.log("📄 Group[subDocKey]:", group[subDocKey]);
+
+      const docArray = group[subDocKey];
+      if (!Array.isArray(docArray)) {
+        return res
+          .status(400)
+          .json({ error: `${subDocKey} array not found in group` });
+      }
+
+      const index = docArray.findIndex((doc) => doc._id.toString() === docId);
+      if (index === -1) {
+        return res.status(404).json({ error: "Document not found in group" });
+      }
+
+      // Delete file from disk
+      const filePath = path.join(__dirname, "..", docArray[index].fileUrl);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+      // Remove from array
+      docArray.splice(index, 1);
+      await group.save();
+
+      res.json({ message: "Document deleted successfully", group });
+    } catch (err) {
+      console.error("❌ Error deleting document:", err.message);
+      console.error(err.stack);
+      res.status(500).json({ error: "Deletion failed", message: err.message });
+    }
+  }
+);
 
 module.exports = router;
