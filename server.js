@@ -13,6 +13,7 @@ const projectRoutes = require('./routes/project.js');
 const patentRoutes = require('./routes/patent.js');
 const technologyRoutes = require('./routes/technologyDeveloped.js');
 const publicationRoutes = require('./routes/publication.js');
+const documentRoutes = require('./routes/document.js');
 const allowRoles = require('./middlewares/allowRoles.js');
 const auth = require('./middlewares/auth.js');
 const app = express();
@@ -51,12 +52,15 @@ app.use('/api/users', userRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/labs', labRoutes);
 app.use('/api/logs', logRoutes);
+// app.use('/api/profile', profileRoutes);
 
 app.use('/api/projects',projectRoutes);
 app.use('/api/patents', patentRoutes);
 app.use('/api/technologies', technologyRoutes);
 app.use('/api/publications',publicationRoutes);
 app.use('/api/courses',courseRoutes);
+app.use('/api/documents',documentRoutes);
+app.use('/uploads', express.static('uploads'));
 
 
 // Base route

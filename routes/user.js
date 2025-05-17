@@ -6,17 +6,20 @@ const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
 const auth = require('../middlewares/auth');
+
+// Ensure uploads and subdirectory exist
 const uploadsDir = path.join(__dirname, "../uploads");
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir);
-}
-// Multer config
-const storage = multer.diskStorage({
+const employeePhotosDir = path.join(uploadsDir, "employees");
+
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
+if (!fs.existsSync(employeePhotosDir)) fs.mkdirSync(employeePhotosDir);
+
+// === Multer for documents (PDFs only) ===
+const docStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
   filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname),
 });
-
-const fileFilter = (req, file, cb) => {
+const docFilter = (req, file, cb) => {
   const ext = path.extname(file.originalname).toLowerCase();
   if (ext === ".pdf" && file.mimetype === "application/pdf") {
     cb(null, true);
@@ -24,12 +27,29 @@ const fileFilter = (req, file, cb) => {
     cb(new Error("Only PDF files are allowed"), false);
   }
 };
-const upload = multer({
-  storage,
-  fileFilter,
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2 MB
+const uploadDoc = multer({
+  storage: docStorage,
+  fileFilter: docFilter,
+  limits: { fileSize: 2 * 1024 * 1024 },
 });
-// GET user by ID
+
+// === Multer for photo upload (images only) ===
+const imageStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, "uploads/employees/"),
+  filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname),
+});
+const imageFilter = (req, file, cb) => {
+  const allowed = ["image/jpeg", "image/png", "image/jpg"];
+  if (allowed.includes(file.mimetype)) cb(null, true);
+  else cb(new Error("Only JPEG/PNG images allowed"), false);
+};
+const uploadImage = multer({
+  storage: imageStorage,
+  fileFilter: imageFilter,
+  limits: { fileSize: 1 * 1024 * 1024 }, // 1MB
+});
+
+// === GET user by ID ===
 router.get("/:id", async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
@@ -39,7 +59,8 @@ router.get("/:id", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch user" });
   }
 });
-// PUT update user
+
+// === PUT update user ===
 router.put("/:id", async (req, res) => {
   try {
     const updated = await User.findByIdAndUpdate(req.params.id, req.body, {
@@ -51,14 +72,13 @@ router.put("/:id", async (req, res) => {
     res.status(500).json({ error: "Failed to update user" });
   }
 });
-// POST upload a document
+
+// === POST upload document ===
 router.post("/:id/upload", auth, (req, res) => {
-  upload.single("file")(req, res, async (err) => {
+  uploadDoc.single("file")(req, res, async (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === "LIMIT_FILE_SIZE") {
-        return res
-          .status(400)
-          .json({ error: "File too large. Max 2MB allowed." });
+        return res.status(400).json({ error: "File too large. Max 2MB allowed." });
       }
       return res.status(400).json({ error: err.message });
     } else if (err) {
@@ -80,14 +100,36 @@ router.post("/:id/upload", auth, (req, res) => {
   });
 });
 
-// GET all users
+// === POST upload profile photo ===
+router.post("/:id/upload-photo", auth, (req, res) => {
+  uploadImage.single("photo")(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ error: "Image too large. Max 1MB allowed." });
+    } else if (err) {
+      return res.status(400).json({ error: err.message });
+    }
+
+    try {
+      const user = await User.findById(req.params.id);
+      user.photo = `/uploads/employees/${req.file.filename}`;
+      await user.save();
+      await Log.create({ userId: req.params.id, action: "Uploaded profile photo" });
+      res.json({ message: "Profile photo uploaded", photoUrl: user.photo });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to upload photo" });
+    }
+  });
+});
+
+// === GET all users ===
 router.get("/", async (req, res) => {
   try {
     const users = await User.find();
-    await Log.create({ action: "Viewed all users" }); // No userId because it might be admin/system-wide
+    await Log.create({ action: "Viewed all users" });
     res.json(users);
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch users" });
   }
 });
+
 module.exports = router;

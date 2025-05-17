@@ -44,15 +44,32 @@ router.get("/", async (req, res) => {
 router.post("/", auth, allowRoles("admin"), async (req, res) => {
   try {
     const { labId } = req.params;
-    const { name, description, employees } = req.body;
+    const { name, description, vision, mission, employees } = req.body;
     if (!name) return res.status(400).json({ error: "Group name required" });
 
-    const group = new Group({ name, description, labId, employees });
+    const group = new Group({ name, description, vision, mission, labId, employees });
     const saved = await group.save();
     res.status(201).json(saved);
   } catch (err) {
     console.error("Error creating group:", err);
     res.status(500).json({ error: "Failed to create group" });
+  }
+});
+
+// UPDATE group details (name, description, vision, mission, employees)
+router.put("/:id", auth, allowRoles("admin"), async (req, res) => {
+  try {
+    const { name, description, vision, mission, employees } = req.body;
+    const updated = await Group.findByIdAndUpdate(
+      req.params.id,
+      { name, description, vision, mission, employees },
+      { new: true, runValidators: true }
+    );
+    if (!updated) return res.status(404).json({ error: "Group not found" });
+    res.json(updated);
+  } catch (err) {
+    console.error("Error updating group:", err);
+    res.status(500).json({ error: "Failed to update" });
   }
 });
 
@@ -109,21 +126,21 @@ router.post(
 );
 
 // UPDATE group details (name/desc/employees)
-router.put("/:id", auth, allowRoles("admin"), async (req, res) => {
-  try {
-    const { name, description, employees } = req.body;
-    const updated = await Group.findByIdAndUpdate(
-      req.params.id,
-      { name, description, employees },
-      { new: true, runValidators: true }
-    );
-    if (!updated) return res.status(404).json({ error: "Group not found" });
-    res.json(updated);
-  } catch (err) {
-    console.error("Error updating group:", err);
-    res.status(500).json({ error: "Failed to update" });
-  }
-});
+// router.put("/:id", auth, allowRoles("admin"), async (req, res) => {
+//   try {
+//     const { name, description, employees } = req.body;
+//     const updated = await Group.findByIdAndUpdate(
+//       req.params.id,
+//       { name, description, employees },
+//       { new: true, runValidators: true }
+//     );
+//     if (!updated) return res.status(404).json({ error: "Group not found" });
+//     res.json(updated);
+//   } catch (err) {
+//     console.error("Error updating group:", err);
+//     res.status(500).json({ error: "Failed to update" });
+//   }
+// });
 
 // DELETE group
 router.delete("/:id", auth, allowRoles("admin"), async (req, res) => {
