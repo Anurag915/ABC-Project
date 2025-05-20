@@ -16,6 +16,7 @@ const publicationRoutes = require('./routes/publication.js');
 const documentRoutes = require('./routes/document.js');
 const allowRoles = require('./middlewares/allowRoles.js');
 const auth = require('./middlewares/auth.js');
+const contactRoutes = require('./routes/contact.js');
 const app = express();
 
 // Middleware
@@ -61,6 +62,7 @@ app.use('/api/publications',publicationRoutes);
 app.use('/api/courses',courseRoutes);
 app.use('/api/documents',documentRoutes);
 app.use('/uploads', express.static('uploads'));
+app.use('/api/contact-info', contactRoutes);
 
 
 // Base route

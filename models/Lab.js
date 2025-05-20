@@ -1,4 +1,42 @@
 const mongoose = require("mongoose");
+const { Schema } = mongoose;
+
+const FileItemSchema = new Schema(
+  {
+    name: { type: String, required: true },
+    description: { type: String, required: true },
+    fileUrl: { type: String, required: true }, // Store uploaded file URL here
+  },
+  { _id: true }
+);
+
+const ContactInfoSchema = new Schema(
+  {
+    type: {
+      type: String,
+      enum: ["Email", "Phone", "Address", "Other"],
+      required: true,
+    },
+    label: { type: String },
+    value: { type: String, required: true },
+  },
+  { _id: true }
+);
+
+const DirectorSchema = new Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    name: { type: String }, // for retired director
+    designation: { type: String },
+    image: { type: String },
+    from: { type: Date, required: true },
+    to: { type: Date }, // null for currently serving
+  },
+  { _id: true }
+);
 
 const LabSchema = new mongoose.Schema(
   {
@@ -7,13 +45,9 @@ const LabSchema = new mongoose.Schema(
     vision: { type: String },
     mission: { type: String },
     about: { type: String },
-    director: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
+    directors: [DirectorSchema], // Array of directors],
 
-    // Referencing other collections instead of embedding data directly
+    // Referencing other collections instead of embedding data directly,
     technologiesDeveloped: [
       { type: mongoose.Schema.Types.ObjectId, ref: "TechnologyDeveloped" },
     ],
@@ -26,6 +60,11 @@ const LabSchema = new mongoose.Schema(
 
     // Manpower list of users working in the lab
     manpowerList: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    contactInfo: [ContactInfoSchema], // <-- Add this field here
+    notices: [FileItemSchema],
+    circulars: [FileItemSchema],
+    advertisements: [FileItemSchema],
+    products: [FileItemSchema],
   },
   { timestamps: true }
 );

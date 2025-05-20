@@ -5,7 +5,7 @@ const Log = require("../models/Log.js");
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
-const auth = require('../middlewares/auth');
+const auth = require("../middlewares/auth");
 
 // Ensure uploads and subdirectory exist
 const uploadsDir = path.join(__dirname, "../uploads");
@@ -61,11 +61,29 @@ router.get("/:id", async (req, res) => {
 });
 
 // === PUT update user ===
-router.put("/:id", async (req, res) => {
+router.put("/:id", auth, async (req, res) => {
   try {
-    const updated = await User.findByIdAndUpdate(req.params.id, req.body, {
+    const updates = req.body;
+
+    // If user is not admin, prevent editing `employmentPeriod.to`
+    if (req.user.role !== "admin" && updates?.employmentPeriod?.to) {
+      return res
+        .status(403)
+        .json({ error: "Only admins can set the ending date." });
+    }
+
+    // Optional: prevent normal user from editing someone else's profile
+    if (req.user.role !== "admin" && req.user.id !== req.params.id) {
+      return res
+        .status(403)
+        .json({ error: "You are not authorized to update this user." });
+    }
+
+    const updated = await User.findByIdAndUpdate(req.params.id, updates, {
       new: true,
+      runValidators: true,
     });
+
     await Log.create({ userId: req.params.id, action: "Updated user profile" });
     res.json(updated);
   } catch (err) {
@@ -78,7 +96,9 @@ router.post("/:id/upload", auth, (req, res) => {
   uploadDoc.single("file")(req, res, async (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === "LIMIT_FILE_SIZE") {
-        return res.status(400).json({ error: "File too large. Max 2MB allowed." });
+        return res
+          .status(400)
+          .json({ error: "File too large. Max 2MB allowed." });
       }
       return res.status(400).json({ error: err.message });
     } else if (err) {
@@ -109,17 +129,31 @@ router.post("/:id/upload-photo", auth, (req, res) => {
       return res.status(400).json({ error: err.message });
     }
 
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
     try {
       const user = await User.findById(req.params.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
       user.photo = `/uploads/employees/${req.file.filename}`;
       await user.save();
-      await Log.create({ userId: req.params.id, action: "Uploaded profile photo" });
+
+      await Log.create({
+        userId: req.params.id,
+        action: "Uploaded profile photo",
+      });
+
       res.json({ message: "Profile photo uploaded", photoUrl: user.photo });
     } catch (err) {
       res.status(500).json({ error: "Failed to upload photo" });
     }
   });
 });
+
 
 // === GET all users ===
 router.get("/", async (req, res) => {
